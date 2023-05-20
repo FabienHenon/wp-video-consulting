@@ -3,7 +3,7 @@
 Plugin Name: Video Consultings
 Plugin URI: https://fabien404.fr/
 Description: Plugin for video consultings
-Version: 1.0.18
+Version: 1.0.21
 Author: Fabien 404
 Author URI: https://fabien404.fr/
 License: GPL2
@@ -107,35 +107,60 @@ function video_consultings_consulting_answers_shortcode()
 
     // Pagination
     $current_page = max(1, absint(get_query_var('paged')));
-    $per_page = 20;
+    $per_page = 10;
     $offset = ($current_page - 1) * $per_page;
 
     // Query pour récupérer les réponses avec leurs questions liées
     $query = "SELECT a.*, q.client_name, q.question, q.category
-              FROM $table_name_answers AS a
-              LEFT JOIN $table_name_questions AS q
-              ON a.id = q.answer_id
-              ORDER BY a.date DESC
-              LIMIT $per_page OFFSET $offset";
+          FROM $table_name_answers AS a
+          LEFT JOIN $table_name_questions AS q
+          ON a.id = q.answer_id
+          ORDER BY a.date DESC
+          LIMIT $per_page OFFSET $offset";
 
     $results = $wpdb->get_results($query);
 
     ob_start();
     if ($results) {
 
+        $answers = [];
+
+        // Parcourir les résultats et organiser les données
         foreach ($results as $row) {
+            $answer_id = $row->id;
+
+            // Si l'answer_id n'existe pas dans le tableau $answers, l'ajouter avec ses données
+            if (!isset($answers[$answer_id])) {
+                $answers[$answer_id] = [
+                    'id' => $row->id,
+                    'date' => $row->date,
+                    'title' => $row->title,
+                    'video_url' => $row->video_url,
+                    'questions' => [],
+                ];
+            }
+
+            // Ajouter la question actuelle à la liste des questions de l'answer_id correspondant
+            $answers[$answer_id]['questions'][] = [
+                'client_name' => $row->client_name,
+                'question' => $row->question,
+                'category' => $row->category,
+            ];
+        }
+
+        foreach ($answers as $row) {
             echo '<div class="consultings-accordion">';
             echo '<div class="consultings-answer-head">';
             echo '<div class="consultings-answer-head-title">' .
-                esc_html($row->title) .
+                esc_html($row['title']) .
                 '</div><div class="consultings-answer-head-date">' .
-                date_i18n('d/m/Y H:i', strtotime($row->date)) .
+                date_i18n('d/m/Y H:i', strtotime($row['date'])) .
                 '</div>';
             echo '</div>';
             echo '<div class="consultings-answer-content">';
 
             echo '<div class="consultings-answer-content-video">' .
-                str_replace('%video_url%', esc_url($row->video_url), $embed) .
+                str_replace('%video_url%', esc_url($row['video_url']), $embed) .
                 '</div>';
 
             // Liste des questions liées
@@ -143,16 +168,20 @@ function video_consultings_consulting_answers_shortcode()
             echo '<tr><th class="question">Question</th><th class="who">Qui pose la question ?</th><th class="category">Catégorie</th></tr>';
 
             // Vérification si des questions sont liées à cette réponse
-            if (!empty($row->client_name)) {
-                echo '<tr>';
-                echo '<td class="question">' .
-                    nl2br(esc_html($row->question)) .
-                    '</td>';
-                echo '<td class="who">' . esc_html($row->client_name) . '</td>';
-                echo '<td class="category">' .
-                    esc_html($row->category) .
-                    '</td>';
-                echo '</tr>';
+            if (count($row['questions']) > 0) {
+                foreach ($row['questions'] as $question) {
+                    echo '<tr>';
+                    echo '<td class="question">' .
+                        nl2br(esc_html($question['question'])) .
+                        '</td>';
+                    echo '<td class="who">' .
+                        esc_html($question['client_name']) .
+                        '</td>';
+                    echo '<td class="category">' .
+                        esc_html($question['category']) .
+                        '</td>';
+                    echo '</tr>';
+                }
             } else {
                 echo '<tr><td colspan="3" class="empty">Aucune question trouvée.</td></tr>';
             }
@@ -181,17 +210,18 @@ function video_consultings_consulting_answers_shortcode()
             echo '</div>';
         }
         ?>
-        <script type="text/javascript">
-            jQuery(function() {
-                jQuery(".consultings-answer-head").on("click", function() {
-                    jQuery(this).parent().find(".consultings-answer-content").toggle();
-                });
+    <script type="text/javascript">
+        jQuery(function() {
+            jQuery(".consultings-answer-head").on("click", function() {
+                jQuery(this).parent().find(".consultings-answer-content").toggle();
             });
-        </script>
-        <?php
+        });
+    </script>
+    <?php
     } else {
         echo '<div class="consulting-answers-empty">Aucune consultation trouvée.</div>';
     }
+
     return ob_get_clean();
 }
 
